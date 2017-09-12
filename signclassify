@@ -1,0 +1,289 @@
+def evaluate(X_data, y_data):
+    num_examples = len(X_data)
+    total_accuracy = 0
+    sess = tf.get_default_session()
+    for offset in range(0, num_examples, BATCH_SIZE):
+        batch_x, batch_y = X_data[offset:offset+BATCH_SIZE], y_data[offset:offset+BATCH_SIZE]
+        accuracy = sess.run(accuracy_operation, feed_dict={x: batch_x, y: batch_y})
+        total_accuracy += (accuracy * len(batch_x))
+    return total_accuracy / num_examples
+
+def SignClassify_CNN(x):
+    # Arguments used for tf.truncated_normal, randomly defines variables for the weights and biases for each layer
+    mu = 0
+    sigma = 0.1
+
+    # TODO: Layer 1: Convolutional. Input = 32x32x3. Output = 30x30x12.
+    W = tf.Variable(tf.truncated_normal(shape = [3, 3, 3, 12], mean = mu, stddev = sigma))
+    b = tf.Variable(tf.zeros([12]))
+    conv = tf.nn.conv2d(x,W,strides = [1,1,1,1], padding = 'VALID')
+    conv = tf.nn.bias_add(conv,b)
+
+    # TODO: Activation.
+    act = tf.nn.relu(conv)
+
+    # TODO: Pooling. Input = 30x30x12. Output = 15x15x12.
+    act = tf.nn.max_pool(act,ksize=[1,2,2,1],strides=[1,2,2,1], padding = 'VALID')
+
+    # TODO: Layer 2: Convolutional. Output = 12x12x24.
+    W = tf.Variable(tf.truncated_normal(shape = [4, 4, 12, 24], mean = mu, stddev = sigma))
+    b = tf.Variable(tf.zeros([24]))
+    conv = tf.nn.conv2d(act,W,strides = [1,1,1,1], padding = 'VALID')
+    conv = tf.nn.bias_add(conv,b)
+
+    # TODO: Activation.
+    act = tf.nn.relu(conv)
+
+    # TODO: Pooling. Input = 12x12x24. Output = 6x6x24.
+    act = tf.nn.max_pool(act,ksize=[1,2,2,1],strides=[1,2,2,1], padding = 'VALID')
+
+    # TODO: Layer 3: Convolutional. Output = 3x3x48.
+    W = tf.Variable(tf.truncated_normal(shape = [4, 4, 24, 48], mean = mu, stddev = sigma))
+    b = tf.Variable(tf.zeros([48]))
+    conv = tf.nn.conv2d(act,W,strides = [1,1,1,1], padding = 'VALID')
+    conv = tf.nn.bias_add(conv,b)
+
+    # TODO: Activation.
+    act = tf.nn.relu(conv)
+
+    # TODO: Flatten. Input = 3x3x48. Output = 432.
+    flat = tf.contrib.layers.flatten(act)
+
+    # TODO: Layer 4: Fully Connected. Input = 120. Output = 84.
+    W = tf.Variable(tf.truncated_normal(shape = [432, 216], mean = mu, stddev = sigma))
+    b = tf.Variable(tf.zeros([216]))
+    fc = tf.add(tf.matmul(flat,W),b)
+
+    # TODO: Activation.
+    act = tf.nn.relu(fc)
+
+    # TODO: Layer 5: Fully Connected. Input = 84. Output = 10.
+    W = tf.Variable(tf.truncated_normal(shape = [216, 108], mean = mu, stddev = sigma))
+    b = tf.Variable(tf.zeros([108]))
+    fc = tf.add(tf.matmul(act,W),b)
+
+    # TODO: Activation.
+    act = tf.nn.relu(fc)
+
+    # TODO: Layer 6: Fully Connected. Input = 84. Output = 43.
+    W = tf.Variable(tf.truncated_normal(shape = [108, 43], mean = mu, stddev = sigma))
+    b = tf.Variable(tf.zeros([43]))
+    fc = tf.add(tf.matmul(act,W),b)
+
+    logits = fc
+
+    return logits
+
+import pickle
+import csv
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import normalize, scale
+from sklearn.utils import shuffle
+from tensorflow.contrib.layers import flatten
+from scipy import misc
+
+load_file = "./signclassify_cnn"
+save_file = "./signclassify_cnn"
+train_type = ["External","Training","Test","Validate"]     #Choices "Training", "External", "New", "Test" "Validate", "Continue"
+BATCH_SIZE = 128
+EPOCHS = 50
+rate = 0.0005
+
+#Load Pickle Files
+training_file = "./datasets/train.p"
+validation_file = "./datasets/valid.p"
+testing_file = "./datasets/test.p"
+
+with open(training_file, mode='rb') as f:
+    train = pickle.load(f)
+with open(validation_file, mode='rb') as f:
+    valid = pickle.load(f)
+with open(testing_file, mode='rb') as f:
+    test = pickle.load(f)
+
+#Set Train, Test, Validation Data
+sign_names = csv.reader(open('./signnames.csv'))
+sign_names = [v for k,v in sign_names][1:]
+X_train, y_train = np.array(train['features']).astype(float), np.array(train['labels']).astype(float)
+X_valid, y_valid = np.array(valid['features']).astype(float), np.array(valid['labels']).astype(float)
+X_test, y_test = np.array(test['features']).astype(float), np.array(test['labels']).astype(float)
+X_show = np.array(train['features'])
+print("Data Loaded")
+
+#Load External Test Images
+external_img_files = ["general_caution","30_km_speed_limit", "bumpy_road", "no_entry", "wild_animals_crossing"]
+external_img = ["General caution", "Speed limit (30km/h)", "Bumpy road", "No entry", "Wild animals crossing"]
+X_external = np.zeros((len(external_img_files),32,32,3)).astype(float)
+X_external_show = np.zeros((len(external_img_files),32,32,3)).astype(np.uint8)
+y_external = np.zeros(len(external_img_files)).astype(float)
+for i in range(len(external_img_files)):
+    X_external[i,:,:,:] = misc.imread("./datasets2/" + external_img_files[i] + ".jpeg")
+    X_external_show[i,:,:,:] = misc.imread("./datasets2/" + external_img_files[i] + ".jpeg")
+for i,j in enumerate(sign_names):
+    for n,m in enumerate(external_img):
+        if m == j:
+            y_external[n] = i
+print("External Data Loaded")
+
+# TODO: Number of training examples
+if np.shape(X_train)[0] != np.shape(y_train)[0]:
+    print('error: training input count does not match label count')
+    assert np.shape(X_train)[0] == np.shape(y_train)[0]
+else:
+    n_train = np.shape(X_train)[0]
+
+# TODO: Number of validation examples
+if np.shape(X_valid)[0] != np.shape(y_valid)[0]:
+    print('error: validation input count does not match label count')
+    assert np.shape(X_valid)[0] == np.shape(y_valid)[0]
+else:
+    n_valid = np.shape(X_valid)[0]
+
+# TODO: Number of testing examples.
+if np.shape(X_test)[0] != np.shape(y_test)[0]:
+    print('error: test input count does not match label count')
+    assert np.shape(X_test)[0] == np.shape(y_test)[0]
+else:
+    n_test = np.shape(X_test)[0]
+
+# TODO: What's the shape of an traffic sign image?
+image_shape = np.shape(X_train)[1:4]
+
+# TODO: How many unique classes/labels there are in the dataset.
+sign_train, counts_train = np.unique(y_train, return_counts = True)
+n_classes = len(sign_train)
+
+
+print("Number of training examples =", n_train)
+print("Number of testing examples =", n_test)
+print("Number of validation examples =", n_valid)
+print("Image data shape =", image_shape)
+print("Number of classes =", n_classes)
+
+#display random sign image and counts for training set
+fig , axes = plt.subplots(2, figsize = (15,10))
+fig.subplots_adjust(hspace=1.5, wspace=1.5)
+rand_sign = np.random.randint(0,n_train)
+axes[0].imshow(X_show[rand_sign,:,:,:])
+axes[0].set_title("Image Example - " + sign_names[y_train[rand_sign].astype(int)] )
+axes[1].bar(sign_train,counts_train)
+axes[1].set_title("Training Set Image Count")
+plt.xticks(sign_train,sign_names, rotation = 90)
+plt.tight_layout(pad = 3.0)
+plt.show()
+
+#Plot External Imgs
+fig , axes = plt.subplots(5, figsize = (15,10))
+fig.subplots_adjust(hspace=1.5, wspace=1.5)
+for i in range(len(external_img_files)):
+    axes[i].imshow(X_external_show[i,:,:,:])
+    axes[i].set_title("External Image - " + sign_names[y_external[i].astype(int)] )
+plt.show()
+
+#normalize image data
+X_valid = (X_valid - 127.5)/(127.5)
+X_train = (X_train - 127.5)/(127.5)
+X_test = (X_test - 127.5)/(127.5)
+X_external = (X_external - 127.5)/(127.5)
+print('Data Scaled & Normalized')
+
+x = tf.placeholder(tf.float32, (None,) + image_shape)
+y = tf.placeholder(tf.int32, (None))
+one_hot_y = tf.one_hot(y,n_classes)
+
+logits = SignClassify_CNN(x)
+cross_entropy = tf.nn.softmax_cross_entropy_with_logits(labels=one_hot_y, logits=logits)
+loss_operation = tf.reduce_mean(cross_entropy)
+optimizer = tf.train.AdamOptimizer(learning_rate = rate)
+training_operation = optimizer.minimize(loss_operation)
+
+correct_prediction = tf.equal(tf.argmax(logits, 1), tf.argmax(one_hot_y, 1))
+accuracy_operation = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+saver = tf.train.Saver()
+
+for n in train_type:
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        num_examples = n_train
+
+        if n == "Validate":
+            saver.restore(sess, load_file)
+            print("Calculating Validation Set Accuracy...")
+            validation_accuracy = evaluate(X_valid, y_valid)
+            print("Validation Accuracy = {:.3f}".format(validation_accuracy))
+            print()
+        elif n == "Test":
+            saver.restore(sess, load_file)
+            print("Calcuating Testing Set Accuracy...")
+            testing_accuracy = evaluate(X_valid, y_valid)
+            print("Testing Accuracy = {:.3f}".format(testing_accuracy))
+            print()
+        elif n == "Training":
+            saver.restore(sess, load_file)
+            print("Calculating Training Set Accuracy...")
+            testing_accuracy = evaluate(X_valid, y_valid)
+            print("Testing Accuracy = {:.3f}".format(testing_accuracy))
+            print()
+        elif n == "New":
+            print("Training New...")
+            print()
+            for i in range(EPOCHS):
+                X_train, y_train = shuffle(X_train, y_train)
+                for offset in range(0, num_examples, BATCH_SIZE):
+                    end = offset + BATCH_SIZE
+                    batch_x, batch_y = X_train[offset:end], y_train[offset:end]
+                    sess.run(training_operation, feed_dict={x: batch_x, y: batch_y})
+
+                validation_accuracy = evaluate(X_valid, y_valid)
+                print("EPOCH {} ...".format(i+1))
+                print("Validation Accuracy = {:.3f}".format(validation_accuracy))
+                print()
+
+                saver.save(sess, save_file)
+                print("Model saved")
+
+        elif n == "Continue":
+            saver.restore(sess, load_file)
+            print("Restored Weights & Biases to Continue Training...")
+            print()
+            for i in range(EPOCHS):
+                X_train, y_train = shuffle(X_train, y_train)
+                for offset in range(0, num_examples, BATCH_SIZE):
+                    end = offset + BATCH_SIZE
+                    batch_x, batch_y = X_train[offset:end], y_train[offset:end]
+                    sess.run(training_operation, feed_dict={x: batch_x, y: batch_y})
+
+                validation_accuracy = evaluate(X_valid, y_valid)
+                print("EPOCH {} ...".format(i+1))
+                print("Validation Accuracy = {:.3f}".format(validation_accuracy))
+                print()
+
+                saver.save(sess, save_file)
+                print("Model saved")
+
+        elif n == "External":
+            saver.restore(sess, load_file)
+            external_prediction = sess.run(tf.argmax(logits, 1), feed_dict={x: X_external, y: y_external})
+            i = 1
+            for n in external_prediction:
+                print(n)
+                print("External Image " + str(i) + " Prediction = " + sign_names[int(n)] + "    Actual = " + external_img[i-1])
+                i += 1
+
+            print("Testing External Image Accuracy...")
+            external_accuracy = evaluate(X_external, y_external)
+            print("External Accuracy = {:.3f}".format(external_accuracy))
+            print()
+
+            print("Top 5 Softmax Probabilities")
+            top5_softmax = sess.run(tf.nn.top_k(tf.nn.softmax(logits=logits),k=5), feed_dict={x: X_external, y: y_external})
+            for n in range(len(external_img)):
+                print("For Image " + external_img[n])
+                print(top5_softmax.values[n])
+                softmax_predictions = ['','','','','']
+                for m in range(0,5):
+                    softmax_predictions[m] = sign_names[top5_softmax.indices[n][m]]
+                print(softmax_predictions)
+                print()
